@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Братья Пилоты — установщик</title>
+<meta name="description" content="Собирает готовый пакет порта «Братья Пилоты: По следам полосатого слона» из вашего образа диска прямо в браузере.">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+
+  <header class="head">
+    <div class="langs" id="langs" role="group" aria-label="Язык / Language">
+      <button type="button" data-lang="ru">RU</button>
+      <button type="button" data-lang="en">EN</button>
+    </div>
+    <h1 data-i18n="title"></h1>
+    <p class="lead" data-i18n="lead"></p>
+  </header>
+
+  <section class="card">
+    <h2 data-i18n="step1"></h2>
+    <p class="hint" data-i18n-html="step1Hint"></p>
+    <div class="pickers">
+      <label class="pick">
+        <input type="file" id="iso" accept=".iso">
+        <span class="pick-icon" aria-hidden="true">ISO</span>
+        <span class="pick-title" data-i18n="chooseIso"></span>
+      </label>
+      <label class="pick">
+        <input type="file" id="folder" webkitdirectory multiple>
+        <span class="pick-icon" aria-hidden="true">DIR</span>
+        <span class="pick-title" data-i18n="chooseFolder"></span>
+      </label>
+    </div>
+    <p class="hint" data-i18n-html="sourceHint"></p>
+    <div class="source" id="source" hidden></div>
+  </section>
+
+  <section class="card">
+    <h2 data-i18n="step2"></h2>
+    <div class="platforms" id="platforms" role="radiogroup"></div>
+    <p class="hint" data-i18n="platformHint"></p>
+  </section>
+
+  <section class="card">
+    <h2 data-i18n="step3"></h2>
+    <div class="actions">
+      <button type="button" class="primary" id="create" data-i18n="create" disabled></button>
+      <a class="primary" id="download" hidden></a>
+      <button type="button" class="ghost" id="again" data-i18n="again" hidden></button>
+    </div>
+    <div class="progress" id="progress" hidden><div class="bar" id="bar"></div></div>
+    <p class="status" id="status" role="status" aria-live="polite"></p>
+    <ol class="log" id="log" hidden></ol>
+  </section>
+
+  <footer class="foot">
+    <p class="legal" data-i18n="legal"></p>
+    <p class="links">
+      <a href="https://github.com/kasru/pilots_re" target="_blank" rel="noopener" data-i18n="sourceLink"></a>
+    </p>
+  </footer>
+
+</main>
+<script type="module" src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+{
+  "name": "pilots-installer",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Browser installer for the Pilots port: reads the game disc image in the browser and packs it with the port binary",
+  "type": "module",
+  "scripts": {
+    "dev": "node tools/dev.mjs",
+    "test": "node tools/test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
