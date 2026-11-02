@@ -1,5 +1,23 @@
 {
   "version": "0.1.0",
   "base": "https://github.com/kasru/pilots_re/releases/download/v0.1.0/",
-  "platforms": {}
+  "platforms": {
+    "win-x64": {
+      "PILOTS_RE_x64.EXE": "208f9f0f98ed97a1e73d9113dc1973477a4657e118dc61564689d52898523c55",
+      "SDL2-x64.dll": "9f4c17a07638b711f13704adcb0847e2227099f899fa810bfa5b34dd2ad20ec9"
+    },
+    "win-x86": {
+      "PILOTS_RE.EXE": "863680bd11aaa81e89f261dc1f25d73b89dd68c1a2d8f5ab6a55010b98fb02ae",
+      "SDL2-x86.dll": "b3516903e97055caf9450a723833835d6d8dcb2024526f3fc0f3a0b216974a2c"
+    },
+    "linux-x64": {
+      "PILOTS_RE_x64": "8e13989ebb0b97140485f1be739f7dae160264fc58cadcdaa5c27bbdfd242222"
+    },
+    "switch": {
+      "PILOTS_RE.nro": "e5356136c5b0e4b4f3a3689891cb0ec17528c174931d21727b313a4aa524d68d"
+    },
+    "macos-i386": {
+      "PILOTS_RE": "9055d545fb06852573b8c7fc2c05dfe38bad2f0a26b4771abf790b2d87671f79"
+    }
+  }
 }
