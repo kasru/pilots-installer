@@ -4,6 +4,7 @@
 //
 //   node tools/dev.mjs [--port 8000]
 //       [--win-x64 ../pilots_re/SRC/out/x64] [--win-x86 ../pilots_re/SRC/out/x86]
+//       [--linux-x64 ../pilots_re/build-static]
 //       [--switch ../pilots_re/build-switch-dbg] [--macos-i386 ../pilots_re/build-mac32]
 //
 // Каталоги по умолчанию — раскладка соседнего репозитория pilots_re. Платформа без
@@ -37,6 +38,7 @@ const TYPES = {
 const DEFAULTS = {
   'win-x64': join(PARENT, 'pilots_re', 'SRC', 'out', 'x64'),
   'win-x86': join(PARENT, 'pilots_re', 'SRC', 'out', 'x86'),
+  'linux-x64': join(PARENT, 'pilots_re', 'build-static'),
   switch: join(PARENT, 'pilots_re', 'build-switch-dbg'),
   'macos-i386': join(PARENT, 'pilots_re', 'build-mac32'),
 };

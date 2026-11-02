@@ -16,6 +16,7 @@
 |---|---|---|---|
 | Windows x64 | `pilots-windows-x64.zip` | `PILOTS_RE_x64.EXE`, `SDL2.dll`, данные игры | любой каталог |
 | Windows x86 | `pilots-windows-x86.zip` | `PILOTS_RE.EXE`, `SDL2.dll`, данные игры | любой каталог |
+| Linux x86_64 | `pilots-linux-x64.zip` | `PILOTS_RE_x64`, данные игры | любой каталог |
 | Nintendo Switch | `pilots-switch.zip` | `PILOTS_RE.nro`, данные игры | корень карты памяти (`sdmc:`) |
 | macOS i386 | `pilots-macos-i386.zip` | `PILOTS_RE`, данные игры | любой каталог |
 
@@ -23,8 +24,11 @@
 целиком, включая `.BMP`: движок ищет и их. Остальное содержимое диска (`DEMO/`, `WIN32S/`,
 `AUTORUN.*`, `GMW.DLL`) не читается и в архив не попадает.
 
-Linux в списке нет: сборка динамически линкуется с SDL2 и ffmpeg, и пакет без этих `.so` не
-запустится. macOS — только i386 (10.13–10.14), потому что движок хранит адреса в 32-битном `int`.
+Linux-бинарник — самодостаточный: SDL2 и ffmpeg вшиты в него, поэтому рядом не нужно ни
+`libSDL2-2.0.so.0`, ни `libav*` — только то, что есть на любом десктопе (glibc, X11 или Wayland,
+ALSA/PulseAudio). Сборка только x86_64: 32-разрядной системе нужны i386-версии системных
+библиотек, которых на обычном десктопе нет. macOS — только i386 (10.13–10.14), потому что движок
+хранит адреса в 32-битном `int`.
 
 ## Требования
 
@@ -74,7 +78,8 @@ https://kasru.github.io/pilots-installer/. В форке достаточно в
    ```sh
    node tools/manifest.mjs --version 0.1.0 \
      --base https://github.com/kasru/pilots_re/releases/download/v0.1.0/ \
-     --win-x64 dist/x64 --win-x86 dist/x86 --switch dist/switch --macos-i386 dist/mac
+     --win-x64 dist/x64 --win-x86 dist/x86 --linux-x64 dist/linux \
+     --switch dist/switch --macos-i386 dist/mac
    ```
 
    Скрипт берёт файлы из каталогов под локальными именами (у SDL2 это просто `SDL2.dll`), считает
@@ -85,6 +90,7 @@ https://kasru.github.io/pilots-installer/. В форке достаточно в
    |---|---|
    | Windows x64 | `PILOTS_RE_x64.EXE`, `SDL2-x64.dll` |
    | Windows x86 | `PILOTS_RE.EXE`, `SDL2-x86.dll` |
+   | Linux x86_64 | `PILOTS_RE_x64` |
    | Nintendo Switch | `PILOTS_RE.nro` |
    | macOS i386 | `PILOTS_RE` |
 
@@ -114,7 +120,7 @@ node tools/dev.mjs
 node tools/test.mjs
 ```
 
-Скрипт читает настоящий образ, собирает пакеты всех четырёх платформ и разбирает архивы обратно —
+Скрипт читает настоящий образ, собирает пакеты всех платформ и разбирает архивы обратно —
 сверяет имена, размеры и CRC-32. Готовый архив он кладёт в `dev/test/` для проверки сторонними
 распаковщиками.
 
