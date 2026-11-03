@@ -8,8 +8,10 @@ import { openAsBlob } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { openFolder, openIso } from '../lib/iso.js';import { buildPackage, canBuild, inspectGame, PLATFORMS } from '../lib/installer.js';
-import { crc32Update } from '../lib/zip.js';
+import { openFolder, openIso } from '../lib/iso.js';
+import { buildPackage, canBuild, fullArchiveName, inspectGame, PLATFORMS } from '../lib/installer.js';
+import { readArchive } from '../lib/archive.js';
+import { crc32Update, EXEC_MODE, FILE_MODE, ZipWriter } from '../lib/zip.js';
 import { filesWord, formatSize } from '../lib/i18n.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -33,7 +35,9 @@ function args(argv) {
 
 // Разбор архива «с другого конца»: конец центрального каталога, сам каталог, локальные
 // заголовки и CRC данных. Не тот код, что писал архив, поэтому опечатка в смещениях видна.
-function readArchive(bytes) {
+// Имя другое, чем у читателя из lib/archive.js: здесь проверка свойств собранного
+// zip, а там — превращение архива в записи.
+function checkZip(bytes) {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   let end = -1;
   for (let at = bytes.length - 22; at >= Math.max(0, bytes.length - 22 - 0xffff); at--) {
@@ -75,12 +79,25 @@ function readArchive(bytes) {
   return { entries, size, start };
 }
 
-function fakeBinaries(platform) {
-  const binaries = new Map();
-  for (const asset of platform.assets) {
-    binaries.set(asset.asset, new Blob([new TextEncoder().encode(`test ${asset.asset}\n${'.'.repeat(1024)}`)]));
+// Содержимое архива релиза в тесте подделывается: страница его скачивает сама,
+// а проверяется здесь сборка пакета. Имя бинарника — то, что лежит в настоящем
+// архиве этой платформы (см. scripts/make_release_archives.ps1 в pilots_re).
+const BINARIES = {
+  'win-x64': 'PILOTS_RE_x64.EXE',
+  'win-x86': 'PILOTS_RE.EXE',
+  'linux-x64': 'PILOTS_RE_x64',
+  'linux-386': 'PILOTS_RE',
+  switch: 'PILOTS_RE.nro',
+  'macos-i386': 'PILOTS_RE',
+};
+
+function fakeEntries(platform) {
+  const binary = BINARIES[platform.id];
+  if (!binary) {
+    throw new Error(`нет бинарника для ${platform.id}`);
   }
-  return binaries;
+  const blob = new Blob([new TextEncoder().encode(`test ${binary}\n${'.'.repeat(1024)}`)]);
+  return { name: `pilots-re_1.0_${platform.id}.zip`, entries: [{ path: binary, blob, mode: EXEC_MODE }] };
 }
 
 async function main() {
@@ -127,16 +144,62 @@ async function main() {
   }
   console.log(`папка: ${folderPaths}`);
 
+  // Имя итогового пакета: архив релиза + постфикс -full, расширение всегда zip.
+  const NAME_RULES = [
+    ['pilots-re_1.0_windows_amd64.zip', 'pilots-re_1.0_windows-full_amd64.zip'],
+    ['pilots-re_1.0_linux_amd64.tar.gz', 'pilots-re_1.0_linux-full_amd64.zip'],
+    ['pilots-re_1.0_macos_i386.tar.gz', 'pilots-re_1.0_macos-full_i386.zip'],
+    ['pilots-re_1.0_nintendo_switch.zip', 'pilots-re_1.0_nintendo_switch-full.zip'],
+  ];
+  for (const [from, to] of NAME_RULES) {
+    if (fullArchiveName(from) !== to) {
+      throw new Error(`fullArchiveName(${from}) = ${fullArchiveName(from)}, ожидалось ${to}`);
+    }
+  }
+  console.log(`имена пакетов: ${NAME_RULES.length} правил`);
+
+  // Читатель архивов: zip, собранный нашим же ZipWriter, обязан прочитаться
+  // обратно — с теми же байтами и с правами, которые мы в него положили.
+  // Это проверка lib/archive.js на том формате, который реально отдаёт релиз
+  // (Stored, method 0).
+  {
+    const writer = new ZipWriter();
+    await writer.add('PILOTS_RE', new Blob([new TextEncoder().encode('binary\n')]), { mode: EXEC_MODE });
+    await writer.add('README.md', new Blob([new TextEncoder().encode('# readme\n')]), { mode: FILE_MODE });
+    const read = await readArchive(writer.finish(), 'pilots-re_1.0_linux_amd64.zip');
+    const byName = Object.fromEntries(read.map((entry) => [entry.path, entry]));
+    if ((await byName['README.md'].blob.text()) !== '# readme\n') {
+      throw new Error('readZip: содержимое не совпало');
+    }
+    if (byName['PILOTS_RE'].mode !== EXEC_MODE) {
+      throw new Error('readZip: у бинарника пропал бит запуска');
+    }
+    if (byName['README.md'].mode !== FILE_MODE) {
+      throw new Error('readZip: README стал исполняемым');
+    }
+    console.log(`читатель zip: ${read.length} записи, права на месте`);
+  }
+
   await mkdir(options.out, { recursive: true });
   let saved = null;
   for (const platform of PLATFORMS) {
+    const fake = fakeEntries(platform);
     const built = await buildPackage({
       platform,
       game,
-      binaries: fakeBinaries(platform),
+      archive: fake.name,
+      entries: fake.entries,
     });
+
+    // Имя итогового пакета: к архиву релиза добавляется постфикс -full, и
+    // расширение становится zip — независимо от того, .zip был или .tar.gz.
+    const wanted = fullArchiveName(fake.name);
+    if (built.name !== wanted) {
+      throw new Error(`${platform.id}: имя пакета ${built.name}, ожидалось ${wanted}`);
+    }
+
     const bytes = new Uint8Array(await built.blob.arrayBuffer());
-    const archive = readArchive(bytes);
+    const archive = checkZip(bytes);
     const broken = archive.entries.filter((entry) => !entry.ok);
     if (broken.length) {
       throw new Error(`${platform.id}: повреждены ${broken.map((entry) => entry.name).join(', ')}`);

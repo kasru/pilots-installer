@@ -1,11 +1,20 @@
 #!/usr/bin/env node
-// Собирает release/manifest.json из готовых сборок: берёт файлы каждой платформы,
+// Собирает release/manifest.json из готовых архивов: для каждой платформы
 // считает SHA-256 и записывает манифест, который читает страница.
 //
 //   node tools/manifest.mjs --version 1.0 \
 //        --base https://kasru.github.io/pilots-installer/assets/v1.0/ \
 //        --source https://github.com/kasru/pilots_re/releases/download/v1.0/ \
-//        --win-x64 dist/x64 --win-x86 dist/x86 --switch dist/switch --macos-i386 dist/mac
+//        --win-x64 dist/pilots-re_1.0_windows_amd64.zip \
+//        --win-x86 dist/pilots-re_1.0_windows_386.zip \
+//        --linux-x64 dist/pilots-re_1.0_linux_amd64.tar.gz \
+//        --linux-386 dist/pilots-re_1.0_linux_386.tar.gz \
+//        --switch dist/pilots-re_1.0_nintendo_switch.zip \
+//        --macos-i386 dist/pilots-re_1.0_macos_i386.tar.gz
+//
+// Аргумент платформы — путь к самому архиву (не к каталогу): релиз отдаёт на
+// платформу ровно один файл, и его имя уходит в манифест как есть — от него же
+// страница вычисляет имя итогового пакета с постфиксом -full.
 //
 // Два адреса — не дубликат, а разные роли:
 //   base    — откуда ЧИТАЕТ страница. GitHub Releases CORS-заголовка не отдают
@@ -21,7 +30,7 @@
 
 import { createHash } from 'node:crypto';
 import { readFile, stat, writeFile } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PLATFORMS } from '../lib/installer.js';
 
@@ -34,7 +43,7 @@ function usage(message) {
   }
   console.error(
     'usage: node tools/manifest.mjs --version <version> --base <page url> ' +
-      '[--source <release url>] [--out release/manifest.json] [--<platform> <dir> ...]\n' +
+      '[--source <release url>] [--out release/manifest.json] [--<platform> <archive file> ...]\n' +
       `platforms: ${PLATFORMS.map((platform) => platform.id).join(', ')}`,
   );
   process.exit(2);
@@ -85,20 +94,16 @@ async function main() {
   const options = parseArgs(process.argv.slice(2));
   const platforms = {};
 
-  for (const [id, dir] of options.dirs) {
-    const platform = PLATFORMS.find((candidate) => candidate.id === id);
-    const files = {};
-    for (const asset of platform.assets) {
-      const local = join(dir, asset.local || asset.asset);
-      const info = await stat(local).catch(() => null);
-      if (!info || !info.isFile()) {
-        console.error(`${id}: ${local} not found`);
-        process.exit(1);
-      }
-      files[asset.asset] = await sha256(local);
-      console.log(`${id.padEnd(11)} ${asset.asset.padEnd(20)} ${String(info.size).padStart(9)}  ${files[asset.asset]}`);
+  for (const [id, archive] of options.dirs) {
+    const info = await stat(archive).catch(() => null);
+    if (!info || !info.isFile()) {
+      console.error(`${id}: архив не найден: ${archive}`);
+      process.exit(1);
     }
-    platforms[id] = files;
+    const name = basename(archive);
+    const hash = await sha256(archive);
+    platforms[id] = { [name]: hash };
+    console.log(`${id.padEnd(11)} ${name.padEnd(38)} ${String(info.size).padStart(9)}  ${hash}`);
   }
 
   const manifest = {

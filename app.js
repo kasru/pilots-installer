@@ -1,8 +1,13 @@
 // Склейка страницы: выбор источника, платформы, сборка архива и скачивание.
 
 import { openFolder, openIso } from './lib/iso.js';
-import { buildPackage, canBuild, downloadAssets, inspectGame, PLATFORMS, platformById } from './lib/installer.js';
+import { initCounter, track } from './lib/counter.js';
+import { archiveNameOf, buildPackage, canBuild, downloadArchive, inspectGame, PLATFORMS, platformById } from './lib/installer.js';
 import { errorText, filesWord, formatSize, LANGS, t } from './lib/i18n.js';
+
+// Счётчик запусков подключается один раз и без ожидания: пока ENDPOINT в
+// counter.js пуст, он не делает вообще ничего (см. lib/counter.js).
+initCounter();
 
 const LANG_KEY = 'pilots.lang';
 const el = {
@@ -246,10 +251,12 @@ function refreshStatus() {
   setStatus(`${t(state.lang, 'status.ready')} ${version}`);
 }
 
-function instructionText(platform) {
-  const executable = platform.assets.find((asset) => /\.exe$/i.test(asset.name));
+// Имя запускаемого файла берём из скачанного архива: у Windows инструкция его
+// называет, у остальных платформ — нет, там хватает и общих слов.
+function instructionText(platform, entries) {
   if (platform.instructions === 'windows') {
-    return t(state.lang, 'instr.windows', { exe: executable ? executable.name : platform.assets[0].name });
+    const exe = entries.find((entry) => /\.exe$/i.test(entry.path));
+    return t(state.lang, 'instr.windows', { exe: exe ? exe.path : 'PILOTS_RE.EXE' });
   }
   return t(state.lang, `instr.${platform.instructions}`);
 }
@@ -325,10 +332,15 @@ async function create() {
   paintCreate();
   renderPlatforms();
 
+  // Два события на платформу: начали и закончили. Разрыв между ними — это и
+  // есть мера «собрал, но не дождался», а сам факт сборки под конкретную
+  // платформу ровно то, что нужно знать. Ошибки гасятся внутри track().
+  track(`/build/${platform.id}`);
+
   try {
-    setStatus(t(state.lang, 'build.download', { name: platform.assets[0].asset }));
+    setStatus(t(state.lang, 'build.download', { name: archiveNameOf(platform, state.manifest) }));
     setIndeterminate(true);
-    const binaries = await downloadAssets(platform, state.manifest, {
+    const downloaded = await downloadArchive(platform, state.manifest, {
       onAsset: (asset) => setStatus(t(state.lang, 'build.download', { name: asset })),
     });
 
@@ -337,7 +349,8 @@ async function create() {
     const result = await buildPackage({
       platform,
       game: state.game,
-      binaries,
+      archive: downloaded.name,
+      entries: downloaded.entries,
       onEntry: (path, size) => {
         logLine(t(state.lang, 'build.entry', { path, size: formatSize(size, state.lang) }));
       },
@@ -353,7 +366,8 @@ async function create() {
       true,
     );
     renderResult();
-    setStatus(instructionText(platform), 'ok');
+    setStatus(instructionText(platform, downloaded.entries), 'ok');
+    track(`/built/${platform.id}`);
   } catch (error) {
     setIndeterminate(false);
     el.progress.hidden = true;

@@ -1,19 +1,21 @@
 #!/usr/bin/env node
 // Локальная проверка страницы до публикации релиза: собирает dev/manifest.json из
-// готовых сборок порта, раскладывает их в dev/assets и поднимает статический сервер.
+// архивов релиза, кладёт их в dev/assets и поднимает статический сервер.
 //
-//   node tools/dev.mjs [--port 8000]
-//       [--win-x64 ../pilots_re/SRC/out/x64] [--win-x86 ../pilots_re/SRC/out/x86]
-//       [--linux-x64 ../pilots_re/build-static]
-//       [--switch ../pilots_re/build-switch-dbg] [--macos-i386 ../pilots_re/build-mac32]
+//   node tools/dev.mjs [--port 8000] [--iso ../pilots_re/PILOTS.iso]
+//       [--archives <каталог с архивами>]
+//       [--win-x64 <файл>] [--win-x86 <файл>] [--linux-x64 <файл>]
+//       [--linux-386 <файл>] [--switch <файл>] [--macos-i386 <файл>]
 //
-// Каталоги по умолчанию — раскладка соседнего репозитория pilots_re. Платформа без
-// каталога (или без нужных файлов в нём) просто не попадает в манифест, и страница
-// честно покажет её как отсутствующую в релизе.
+// По умолчанию архивы ищутся в release-archives/ рядом с этой страницей —
+// положите туда то, что собрал scripts/make_release_archives.ps1 из pilots_re.
+// Каталога нет или в нём нет архива какой-то платформы — она просто не
+// попадёт в манифест, и страница честно покажет её отсутствующей.
+// Флаг --<платформа> <файл> переопределяет путь для одной платформы.
 
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { copyFile, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { dirname, extname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -32,21 +34,26 @@ const TYPES = {
   '.png': 'image/png',
   '.ico': 'image/x-icon',
   '.zip': 'application/zip',
-  '.iso': 'application/x-iso9660-image',
+  '.gz': 'application/gzip',
+  '.iso': 'application/iso9660-image',
 };
 
-const DEFAULTS = {
-  'win-x64': join(PARENT, 'pilots_re', 'SRC', 'out', 'x64'),
-  'win-x86': join(PARENT, 'pilots_re', 'SRC', 'out', 'x86'),
-  'linux-x64': join(PARENT, 'pilots_re', 'build-static'),
-  switch: join(PARENT, 'pilots_re', 'build-switch-dbg'),
-  'macos-i386': join(PARENT, 'pilots_re', 'build-mac32'),
+// Чем заканчивается имя архива платформы: pilots-re_<версия>_<суффикс>.
+// Суффикса достаточно, чтобы найти файл в каталоге, не зная версию.
+const ARCHIVE_SUFFIX = {
+  'win-x64': 'windows_amd64.zip',
+  'win-x86': 'windows_386.zip',
+  'linux-x64': 'linux_amd64.tar.gz',
+  'linux-386': 'linux_386.tar.gz',
+  'macos-i386': 'macos_i386.tar.gz',
+  switch: 'nintendo_switch.zip',
 };
 
 function parseArgs(argv) {
   const options = {
     port: 8000,
-    dirs: new Map(Object.entries(DEFAULTS)),
+    archives: join(ROOT, 'release-archives'),
+    files: new Map(),
     // образ нужен только для локальной проверки: страница читает его через fetch('/PILOTS.iso')
     iso: join(PARENT, 'pilots_re', 'PILOTS.iso'),
   };
@@ -59,8 +66,11 @@ function parseArgs(argv) {
     } else if (arg === '--iso' && value) {
       options.iso = resolve(value);
       i += 1;
+    } else if (arg === '--archives' && value) {
+      options.archives = resolve(value);
+      i += 1;
     } else if (arg.startsWith('--') && PLATFORMS.some((platform) => platform.id === arg.slice(2)) && value) {
-      options.dirs.set(arg.slice(2), resolve(value));
+      options.files.set(arg.slice(2), resolve(value));
       i += 1;
     } else {
       console.error(`unknown argument: ${arg}`);
@@ -74,36 +84,45 @@ async function sha256(path) {
   return createHash('sha256').update(await readFile(path)).digest('hex');
 }
 
-// Копирует файлы платформ под именами релиза и возвращает их хеши.
+// Ищет архив платформы: явный путь из аргументов, иначе файл с нужным суффиксом
+// в каталоге --archives.
+async function findArchive(options, platform) {
+  const explicit = options.files.get(platform.id);
+  if (explicit) {
+    const info = await stat(explicit).catch(() => null);
+    return info && info.isFile() ? explicit : null;
+  }
+  const suffix = ARCHIVE_SUFFIX[platform.id];
+  if (!suffix) {
+    return null;
+  }
+  const names = await readdir(options.archives).catch(() => []);
+  const hit = names.find((name) => name.endsWith(suffix));
+  return hit ? join(options.archives, hit) : null;
+}
+
+// Копирует архивы в dev/assets и пишет dev/manifest.json: имя файла — имя в
+// релизе, поэтому локально страница видит ровно то, что увидит на боевой.
 async function buildDevManifest(options) {
   const assetsDir = join(ROOT, 'dev', 'assets');
+  // Скатываем старое: в dev/assets могли лежать файлы прошлого запуска (раньше
+  // это были отдельные бинарники, теперь — архивы), и страница подхватила бы их
+  // вместе с новыми.
+  await rm(assetsDir, { recursive: true, force: true });
   await mkdir(assetsDir, { recursive: true });
   const platforms = {};
 
   for (const platform of PLATFORMS) {
-    const dir = options.dirs.get(platform.id);
-    if (!dir) {
+    const source = await findArchive(options, platform);
+    if (!source) {
+      console.log(`${platform.id}: архив не найден — платформа останется недоступной`);
       continue;
     }
-    const files = {};
-    const present = [];
-    for (const asset of platform.assets) {
-      const source = join(dir, asset.local || asset.asset);
-      const info = await stat(source).catch(() => null);
-      if (!info || !info.isFile()) {
-        present.length = 0;
-        break;
-      }
-      await copyFile(source, join(assetsDir, asset.asset));
-      files[asset.asset] = await sha256(source);
-      present.push(`${asset.asset} (${info.size} B)`);
-    }
-    if (present.length) {
-      platforms[platform.id] = files;
-      console.log(`${platform.id}: ${present.join(', ')}`);
-    } else {
-      console.log(`${platform.id}: нет сборки в ${dir} — платформа останется недоступной`);
-    }
+    const info = await stat(source);
+    const name = source.split(/[\\/]/).pop();
+    await copyFile(source, join(assetsDir, name));
+    platforms[platform.id] = { [name]: await sha256(source) };
+    console.log(`${platform.id}: ${name} (${info.size} B)`);
   }
 
   const manifest = { version: 'dev', base: 'dev/assets/', platforms };
