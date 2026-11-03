@@ -59,8 +59,8 @@ async function main() {
   const manifest = JSON.parse(await readFile(join(ROOT, 'release', 'manifest.json'), 'utf8'));
   const { version, platforms } = manifest;
   const source = manifest.source || manifest.base;
-  // Каталог ассетов называем как тег релиза (v0.1.0): тег и есть то, откуда
-  // качаем, и путаница между "0.1.0" и "v0.1.0" здесь ничего не выигрывает.
+  // Каталог ассетов называем как тег релиза (v1.0): тег и есть то, откуда
+  // качаем, и путаница между "1.0" и "v1.0" здесь ничего не выигрывает.
   const suffix = `assets/v${version}/`;
 
   // Страница читает manifest.base — если там не то, куда ляжет деплой, сайт

@@ -2,9 +2,9 @@
 // Собирает release/manifest.json из готовых сборок: берёт файлы каждой платформы,
 // считает SHA-256 и записывает манифест, который читает страница.
 //
-//   node tools/manifest.mjs --version 0.1.0 \
-//        --base https://kasru.github.io/pilots-installer/assets/v0.1.0/ \
-//        --source https://github.com/kasru/pilots_re/releases/download/v0.1.0/ \
+//   node tools/manifest.mjs --version 1.0 \
+//        --base https://kasru.github.io/pilots-installer/assets/v1.0/ \
+//        --source https://github.com/kasru/pilots_re/releases/download/v1.0/ \
 //        --win-x64 dist/x64 --win-x86 dist/x86 --switch dist/switch --macos-i386 dist/mac
 //
 // Два адреса — не дубликат, а разные роли:

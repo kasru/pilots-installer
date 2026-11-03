@@ -1,7 +1,7 @@
 {
-  "version": "0.1.0",
-  "base": "https://kasru.github.io/pilots-installer/assets/v0.1.0/",
-  "source": "https://github.com/kasru/pilots_re/releases/download/v0.1.0/",
+  "version": "1.0",
+  "base": "https://kasru.github.io/pilots-installer/assets/v1.0/",
+  "source": "https://github.com/kasru/pilots_re/releases/download/v1.0/",
   "platforms": {
     "win-x64": {
       "PILOTS_RE_x64.EXE": "208f9f0f98ed97a1e73d9113dc1973477a4657e118dc61564689d52898523c55",
