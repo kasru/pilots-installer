@@ -1,0 +1,66 @@
+# Публикует установщик на GitHub Pages вместе с ассетами релиза.
+#
+# Зачем workflow, а не «Pages от ветки main»: браузер не может прочитать ассеты
+# GitHub Releases — на том маршруте нет Access-Control-Allow-Origin ни на 302 от
+# github.com, ни от CDN (замерено в браузере: fetch -> TypeError: Failed to fetch),
+# и это свойство GitHub, а не настройка. Решение — положить те же файлы на домен
+# Pages: это тот же origin, что и у страницы, и CORS не нужен вовсе.
+#
+# Ассеты в git НЕ попадают: tools/stage.mjs качает их из релиза в _site/ уже
+# здесь, сверяет SHA-256 с release/manifest.json и только потом файлы уходят в
+# артефакт Pages. История репозитория остаётся маленькой, источник бинарников
+# один — релиз.
+#
+# Триггеры: push (обновилась сама страница), schedule (появился новый релиз) и
+# ручной запуск — его удобно дергать сразу после публикации релиза.
+#
+# Настройка репозитория: Settings → Pages → Source = GitHub Actions.
+
+name: pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: '23 4 * * *'
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Качает ассеты из релиза в _site/ и сверяет SHA-256 с манифестом.
+      # Падает, если релиза нет или файлы разошлись с манифестом.
+      - name: Собрать сайт с ассетами
+        run: node tools/stage.mjs
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

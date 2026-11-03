@@ -3,8 +3,17 @@
 // считает SHA-256 и записывает манифест, который читает страница.
 //
 //   node tools/manifest.mjs --version 0.1.0 \
-//        --base https://github.com/kasru/pilots_re/releases/download/v0.1.0/ \
+//        --base https://kasru.github.io/pilots-installer/assets/v0.1.0/ \
+//        --source https://github.com/kasru/pilots_re/releases/download/v0.1.0/ \
 //        --win-x64 dist/x64 --win-x86 dist/x86 --switch dist/switch --macos-i386 dist/mac
+//
+// Два адреса — не дубликат, а разные роли:
+//   base    — откуда ЧИТАЕТ страница. GitHub Releases CORS-заголовка не отдают
+//             (замерено: fetch -> TypeError: Failed to fetch), поэтому здесь
+//             должен стоять домен Pages, то есть тот же origin, что и у страницы.
+//   source  — откуда БЕРЁТ деплой (tools/stage.mjs), пока ассеты лежат в релизе.
+//             Качается серверно, CORS не нужен; содержимое всё равно сверяется
+//             по SHA-256 из этого же манифеста.
 //
 // Каталог платформы — тот, куда выполнила сборка: в нём лежат файлы под локальными
 // именами из PLATFORMS (у SDL2 это просто SDL2.dll), а в релиз они попадают под
@@ -24,15 +33,15 @@ function usage(message) {
     console.error(message);
   }
   console.error(
-    'usage: node tools/manifest.mjs --version <version> --base <release url> ' +
-      '[--out release/manifest.json] [--<platform> <dir> ...]\n' +
+    'usage: node tools/manifest.mjs --version <version> --base <page url> ' +
+      '[--source <release url>] [--out release/manifest.json] [--<platform> <dir> ...]\n' +
       `platforms: ${PLATFORMS.map((platform) => platform.id).join(', ')}`,
   );
   process.exit(2);
 }
 
 function parseArgs(argv) {
-  const options = { version: '', base: '', out: join(ROOT, 'release', 'manifest.json'), dirs: new Map() };
+  const options = { version: '', base: '', source: '', out: join(ROOT, 'release', 'manifest.json'), dirs: new Map() };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     const value = argv[i + 1];
@@ -41,6 +50,9 @@ function parseArgs(argv) {
       i += 1;
     } else if (arg === '--base' && value) {
       options.base = value;
+      i += 1;
+    } else if (arg === '--source' && value) {
+      options.source = value;
       i += 1;
     } else if (arg === '--out' && value) {
       options.out = resolve(value);
@@ -92,8 +104,11 @@ async function main() {
   const manifest = {
     version: options.version,
     base: options.base.replace(/\/?$/, '/'),
-    platforms,
   };
+  if (options.source) {
+    manifest.source = options.source.replace(/\/?$/, '/');
+  }
+  manifest.platforms = platforms;
   await writeFile(options.out, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
   console.log(`\n${options.out}`);
 }

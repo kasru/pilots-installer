@@ -77,13 +77,23 @@ https://kasru.github.io/pilots-installer/. В форке достаточно в
 
    ```sh
    node tools/manifest.mjs --version 0.1.0 \
-     --base https://github.com/kasru/pilots_re/releases/download/v0.1.0/ \
+     --base https://kasru.github.io/pilots-installer/assets/v0.1.0/ \
+     --source https://github.com/kasru/pilots_re/releases/download/v0.1.0/ \
      --win-x64 dist/x64 --win-x86 dist/x86 --linux-x64 dist/linux \
      --switch dist/switch --macos-i386 dist/mac
    ```
 
    Скрипт берёт файлы из каталогов под локальными именами (у SDL2 это просто `SDL2.dll`), считает
-   SHA-256 и пишет `release/manifest.json`.
+   SHA-256 и пишет `release/manifest.json`. Два адреса — разные роли, а не дубликат:
+
+   - **`base` — откуда читает страница.** Указывать сюда URL релиза нельзя: GitHub Releases не
+     отдают `Access-Control-Allow-Origin` ни на `302` от `github.com`, ни от CDN, куда он ведёт, и
+     браузер оттуда читать отказывается (замерено: `fetch` → `TypeError: Failed to fetch`; у
+     `api.github.com` заголовок есть, но API-маршрут отдаёт тот же `302`). Поэтому здесь стоит
+     домен Pages, а он с страницей — один и тот же origin, и CORS не нужен вовсе.
+   - **`source` — откуда качает деплой** (`tools/stage.mjs`): качает сервер, там CORS не нужен,
+     и содержимое всё равно сверяется по SHA-256 из этого же манифеста.
+
 3. Загрузите файлы в релиз **под именами из манифеста**:
 
    | Платформа | Файлы релиза |
@@ -97,6 +107,13 @@ https://kasru.github.io/pilots-installer/. В форке достаточно в
    Два `SDL2.dll` (x86 и x64) в одном релизе столкнулись бы по имени, поэтому в релизе у них
    суффикс, а внутри архива они снова становятся `SDL2.dll`.
 4. Закоммитьте `release/manifest.json` — страница читает его при загрузке.
+5. Опубликуйте: workflow `pages` (запускается на `push` в `main`, раз в сутки и вручную) сам
+   качает ассеты из релиза в `_site/assets/<тег>/`, сверяет SHA-256, складывает рядом саму
+   страницу и отдаёт каталог в Pages. В git файлы бинарников **не попадают** — история остаётся
+   маленькой, а источник бинарников один, релиз.
+
+   Настройка репозитория один раз: **Settings → Pages → Source = GitHub Actions**.
+   Локально то же самое: `node tools/stage.mjs` собирает `_site/` (в `.gitignore`).
 
 Манифест без платформы означает «этой платформы в релизе нет»: карточка на странице гаснет, и
 собрать её нельзя. Так что выпускать платформы можно по одной.
