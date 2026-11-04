@@ -305,6 +305,11 @@ function renderResult() {
   el.download.href = state.result.url;
   el.download.download = state.result.name;
   el.download.textContent = t(state.lang, 'download', { name: state.result.name });
+  // Клик по «Скачать» — это и есть скачивание: событие уходит на платформу,
+  // под которую собран пакет. Обработчик ставим здесь, а не один раз в начале,
+  // потому что href меняется с каждой сборкой; preventDefault нет — браузер
+  // должен сохранить файл как обычно.
+  el.download.onclick = () => track(`/download/${state.result.platform.id}`);
   el.again.hidden = false;
 }
 
